@@ -222,6 +222,9 @@ func transformFingerprint(
 		MockWebRTC: mockWebRTC,
 		Slim:       slim,
 	}
+	
+	// Initialize Canvas with empty struct
+	fp.Canvas = CanvasFingerprint{}
 
 	// Parse the screen data
 	if screenStr, ok := sample["screen"]; ok && screenStr != "" {
@@ -253,6 +256,18 @@ func transformFingerprint(
 				ClientWidth:     getIntOrDefault(screenData, "clientWidth", 0),
 				ClientHeight:    getIntOrDefault(screenData, "clientHeight", 0),
 				HasHDR:          getBoolOrDefault(screenData, "hasHDR", false),
+			}
+			
+			// Extract window properties from screen data (similar to Python implementation)
+			fp.Window = WindowFingerprint{
+				InnerHeight:     getIntOrDefault(screenData, "innerHeight", 0),
+				OuterHeight:     getIntOrDefault(screenData, "outerHeight", 0),
+				OuterWidth:      getIntOrDefault(screenData, "outerWidth", 0),
+				InnerWidth:      getIntOrDefault(screenData, "innerWidth", 0),
+				ScreenX:         getIntOrDefault(screenData, "screenX", 0),
+				PageXOffset:     getIntOrDefault(screenData, "pageXOffset", 0),
+				PageYOffset:     getIntOrDefault(screenData, "pageYOffset", 0),
+				DevicePixelRatio: getFloatOrDefault(screenData, "devicePixelRatio", 0),
 			}
 		}
 	}
@@ -340,6 +355,13 @@ func transformFingerprint(
 	}
 
 	fp.Navigator = navigator
+	
+	// Create Locale from Navigator language fields
+	fp.Locale = LocaleFingerprint{
+		Language:  navigator.Language,
+		Languages: navigator.Languages,
+		// Default timezone can be added here if needed
+	}
 
 	// Parse VideoCodecs
 	var videoCodecs map[string]string
@@ -364,6 +386,12 @@ func transformFingerprint(
 		}
 	}
 	fp.AudioCodecs = audioCodecs
+	
+	// Create AudioContext with default sample rate of 44100
+	// This is a standard sample rate used by most browsers
+	fp.AudioContext = AudioContextFingerprint{
+		SampleRate: 44100,
+	}
 
 	// Parse PluginsData
 	var pluginsData map[string]interface{}
@@ -399,6 +427,12 @@ func transformFingerprint(
 			}
 			
 			fp.VideoCard = &VideoCard{
+				Renderer: fmt.Sprintf("%v", videoCardData["renderer"]),
+				Vendor:   fmt.Sprintf("%v", videoCardData["vendor"]),
+			}
+			
+			// Also populate WebGL field with the same data
+			fp.WebGL = WebGLFingerprint{
 				Renderer: fmt.Sprintf("%v", videoCardData["renderer"]),
 				Vendor:   fmt.Sprintf("%v", videoCardData["vendor"]),
 			}

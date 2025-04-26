@@ -53,6 +53,44 @@ type VideoCard struct {
 	Vendor   string `json:"vendor"`
 }
 
+// WindowFingerprint defines window-specific properties
+type WindowFingerprint struct {
+	InnerHeight     int     `json:"innerHeight"`
+	OuterHeight     int     `json:"outerHeight"`
+	OuterWidth      int     `json:"outerWidth"`
+	InnerWidth      int     `json:"innerWidth"`
+	ScreenX         int     `json:"screenX"`
+	PageXOffset     int     `json:"pageXOffset"`
+	PageYOffset     int     `json:"pageYOffset"`
+	DevicePixelRatio float64 `json:"devicePixelRatio"`
+}
+
+// WebGLFingerprint defines WebGL-specific properties
+type WebGLFingerprint struct {
+	Renderer string `json:"renderer"`
+	Vendor   string `json:"vendor"`
+	// Additional WebGL properties can be added here
+}
+
+// CanvasFingerprint defines Canvas-specific properties
+type CanvasFingerprint struct {
+	// Canvas fingerprinting properties
+}
+
+// AudioContextFingerprint defines AudioContext-specific properties
+type AudioContextFingerprint struct {
+	// AudioContext fingerprinting properties
+	// Derived from AudioCodecs and other audio-related data
+	SampleRate int `json:"sampleRate"`
+}
+
+// LocaleFingerprint defines locale-specific properties
+type LocaleFingerprint struct {
+	Language  string   `json:"language"`
+	Languages []string `json:"languages"`
+	TimeZone  string   `json:"timeZone,omitempty"`
+}
+
 // Fingerprint is the rich result matching the Python version
 type Fingerprint struct {
 	Screen            ScreenFingerprint       `json:"screen"`
@@ -67,6 +105,13 @@ type Fingerprint struct {
 	Fonts             []string                `json:"fonts"`
 	MockWebRTC        bool                    `json:"mockWebRTC,omitempty"`
 	Slim              bool                    `json:"slim,omitempty"`
+	
+	// Added fields to match the Python interface
+	Window         WindowFingerprint     `json:"window"`
+	WebGL          WebGLFingerprint      `json:"webgl"`
+	Canvas         CanvasFingerprint     `json:"canvas"`
+	AudioContext   AudioContextFingerprint `json:"audio"`
+	Locale         LocaleFingerprint     `json:"locale"`
 }
 
 // ScreenConstraints defines maximum allowed dimensions for screen
