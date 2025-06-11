@@ -5,29 +5,25 @@ import (
 	"regexp"
 )
 
-// applyScreenConstraints ensures screen dimensions don't exceed the defined constraints
 func applyScreenConstraints(screen *ScreenFingerprint, constraints *ScreenConstraints) {
 	if constraints == nil {
 		return
 	}
-	
-	// Clamp width and height to max values
+
 	if screen.Width > constraints.MaxWidth {
 		screen.Width = constraints.MaxWidth
 	}
 	if screen.Height > constraints.MaxHeight {
 		screen.Height = constraints.MaxHeight
 	}
-	
-	// Also adjust available dimensions
+
 	if screen.AvailWidth > constraints.MaxWidth {
 		screen.AvailWidth = constraints.MaxWidth
 	}
 	if screen.AvailHeight > constraints.MaxHeight {
 		screen.AvailHeight = constraints.MaxHeight
 	}
-	
-	// Ensure inner dimensions don't exceed outer ones
+
 	if screen.InnerWidth > screen.Width {
 		screen.InnerWidth = screen.Width
 	}
@@ -36,66 +32,54 @@ func applyScreenConstraints(screen *ScreenFingerprint, constraints *ScreenConstr
 	}
 }
 
-// applyWindowSize adjusts the window size to match the specified dimensions
-// This follows the procedure in handle_window_size from Camoufox
 func applyWindowSize(screen *ScreenFingerprint, windowSize *WindowSize) {
 	if windowSize == nil {
 		return
 	}
-	
-	// Center horizontally and vertically
+
 	screen.ScreenX += (screen.Width - windowSize.Width) / 2
 	screen.PageXOffset = (screen.Width - windowSize.Width) / 2
-	
-	// Adjust inner dimensions
+
 	if screen.InnerWidth > 0 {
 		screen.InnerWidth = max(windowSize.Width-screen.OuterWidth+screen.InnerWidth, 0)
 	}
 	if screen.InnerHeight > 0 {
 		screen.InnerHeight = max(windowSize.Height-screen.OuterHeight+screen.InnerHeight, 0)
 	}
-	
-	// Override outer dimensions
+
 	screen.OuterWidth = windowSize.Width
 	screen.OuterHeight = windowSize.Height
 }
 
-// handleScreenPositioning adjusts screenY to realistic values
-// This follows the handle_screenXY function in Camoufox
 func handleScreenPositioning(screen *ScreenFingerprint) {
 	sx := screen.ScreenX
-	
-	// If screenX is 0, set screenY to 0 as well
+
 	if sx == 0 {
 		screen.ScreenX = 0
 		screen.PageXOffset = 0
 		screen.PageYOffset = 0
 		return
 	}
-	
-	// If screenX is in range [-50, 50], mirror the value to screenY
+
 	if sx >= -50 && sx <= 50 {
 		screen.PageYOffset = sx
 		return
 	}
-	
-	// Calculate max Y value based on available height and window height
+
 	maxY := screen.AvailHeight - screen.OuterHeight
-	
-	// Set a random screenY position based on maxY
+
 	if maxY == 0 {
 		screen.PageYOffset = 0
 	} else if maxY > 0 {
 		screen.PageYOffset = rand.Intn(maxY)
 	} else {
-		// If maxY is negative, set to a random value between maxY and 0
+
 		screen.PageYOffset = maxY + rand.Intn(-maxY)
 	}
 }
 
-// filterFalsyValues removes any nil, 0, or empty values
 func filterFalsyValues(fp *Fingerprint) {
-	// Filter falsy screen values (clamp negatives to 0)
+
 	if fp.Screen.AvailHeight < 0 {
 		fp.Screen.AvailHeight = 0
 	}
@@ -137,37 +121,30 @@ func filterFalsyValues(fp *Fingerprint) {
 	}
 }
 
-// updateFirefoxVersion updates Firefox version numbers in userAgent and appVersion
 func updateFirefoxVersion(fp *Fingerprint, realVersion string) {
-	// Skip if no real version provided
+
 	if realVersion == "" {
 		return
 	}
-	
-	// Regex to match Firefox version numbers like "100.0" in strings
+
 	re := regexp.MustCompile(`(?<!\d)(1[0-9]{2})(\.[0-9]+)(?!\d)`)
-	
-	// Update userAgent
+
 	fp.Navigator.UserAgent = re.ReplaceAllString(fp.Navigator.UserAgent, realVersion+"$2")
-	
-	// Update appVersion
+
 	fp.Navigator.AppVersion = re.ReplaceAllString(fp.Navigator.AppVersion, realVersion+"$2")
-	
-	// Update oscpu if present
+
 	if fp.Navigator.Oscpu != nil {
 		*fp.Navigator.Oscpu = re.ReplaceAllString(*fp.Navigator.Oscpu, realVersion+"$2")
 	}
 }
 
-// whitelistProperties filters the fingerprint to only include properties in whitelist
 func whitelistProperties(fp *Fingerprint, whitelist PropertyWhitelist) *Fingerprint {
-	// Create a new fingerprint with whitelisted properties
+
 	result := &Fingerprint{
 		Headers: make(map[string]string),
 		Battery: make(map[string]interface{}),
 	}
-	
-	// Create screen data from whitelist
+
 	screenData := ScreenFingerprint{}
 	for _, prop := range whitelist.Screen {
 		switch prop {
@@ -202,13 +179,12 @@ func whitelistProperties(fp *Fingerprint, whitelist PropertyWhitelist) *Fingerpr
 		case "screenX":
 			screenData.ScreenX = fp.Screen.ScreenX
 		case "screenY":
-			// screenY is mapped to pageYOffset in our implementation
+
 			screenData.PageYOffset = fp.Screen.PageYOffset
 		}
 	}
 	result.Screen = screenData
-	
-	// Create navigator data from whitelist
+
 	navigatorData := NavigatorFingerprint{}
 	for _, prop := range whitelist.Navigator {
 		switch prop {
@@ -237,15 +213,13 @@ func whitelistProperties(fp *Fingerprint, whitelist PropertyWhitelist) *Fingerpr
 		}
 	}
 	result.Navigator = navigatorData
-	
-	// Filter headers
+
 	for _, header := range whitelist.Headers {
 		if value, exists := fp.Headers[header]; exists {
 			result.Headers[header] = value
 		}
 	}
-	
-	// Filter battery
+
 	if fp.Battery != nil {
 		for _, prop := range whitelist.Battery {
 			if value, exists := fp.Battery[prop]; exists {
@@ -253,11 +227,10 @@ func whitelistProperties(fp *Fingerprint, whitelist PropertyWhitelist) *Fingerpr
 			}
 		}
 	}
-	
+
 	return result
 }
 
-// Helper to get the maximum of two integers
 func max(a, b int) int {
 	if a > b {
 		return a
@@ -265,22 +238,19 @@ func max(a, b int) int {
 	return b
 }
 
-// Helper to extract Firefox version number from user agent
 func extractFirefoxVersion(userAgent string) string {
-	// Match Firefox/XX.X pattern in User-Agent
+
 	re := regexp.MustCompile(`Firefox/(\d+\.\d+)`)
 	matches := re.FindStringSubmatch(userAgent)
 	if len(matches) >= 2 {
 		return matches[1]
 	}
-	
-	// Try to match just a number
+
 	re = regexp.MustCompile(`Firefox/(\d+)`)
 	matches = re.FindStringSubmatch(userAgent)
 	if len(matches) >= 2 {
 		return matches[1]
 	}
-	
-	// Return empty if no match
+
 	return ""
 }

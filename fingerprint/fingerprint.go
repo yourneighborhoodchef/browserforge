@@ -11,7 +11,6 @@ import (
 	"github.com/yourneighborhoodchef/browserforge/internal/headers"
 )
 
-// Generator creates browser fingerprints that can be used for web scraping.
 type Generator struct {
 	network           *bayesian.BayesianNetwork
 	headers           *headers.HeaderGenerator
@@ -25,17 +24,13 @@ type Generator struct {
 	strict            bool
 	mockWebRTC        bool
 	slim              bool
-	
-	// Camoufox constraints
+
 	enableWhitelist   bool
 	screenConstraints *ScreenConstraints
 	windowSize        *WindowSize
 	firefoxVersion    string
 }
 
-// Note: the rich Fingerprint type is defined in types.go
-
-// New creates a new fingerprint generator with default settings.
 func New() (*Generator, error) {
 	net, err := bayesian.LoadFingerprintNetwork()
 	if err != nil {
@@ -48,25 +43,23 @@ func New() (*Generator, error) {
 	return &Generator{
 		network: net,
 		headers: hg,
-		// by default use non-deterministic seed
+
 		seed: nil,
 	}, nil
 }
 
-// SetFirefoxVersion allows setting the actual Firefox version to replace placeholder versions
 func (g *Generator) SetFirefoxVersion(version string) {
 	g.firefoxVersion = version
 }
 
-// Generate creates a new fingerprint with matching HTTP headers.
 func (g *Generator) Generate() (*Fingerprint, error) {
-	// Apply seed for deterministic or random
+
 	if g.seed != nil {
 		rand.Seed(*g.seed)
 	} else {
 		rand.Seed(time.Now().UnixNano())
 	}
-	// Prepare header generation constraints
+
 	inputNet := make(map[string]string)
 	if g.browserOption != "" {
 		inputNet["*BROWSER"] = g.browserOption
@@ -81,89 +74,77 @@ func (g *Generator) Generate() (*Fingerprint, error) {
 	if g.customUserAgent != "" {
 		reqDeps["User-Agent"] = g.customUserAgent
 	}
-	// Generate headers with constraints
+
 	hdrs, err := g.headers.GenerateWithConstraints(inputNet, reqDeps)
 	if err != nil {
 		return nil, fmt.Errorf("generating headers: %w", err)
 	}
-	
-	// Extract User-Agent to ensure consistency
+
 	userAgent := hdrs["User-Agent"]
 	if userAgent == "" {
 		return nil, fmt.Errorf("generated headers missing User-Agent")
 	}
-	
-	// Create constraints with the User-Agent
+
 	constraints := map[string]string{
 		"userAgent": userAgent,
 	}
-	
-	// Sample fingerprint network with all constraints and generate rich Fingerprint
+
 	sampleMap, err := g.network.GenerateSample(constraints)
 	if err != nil {
 		return nil, fmt.Errorf("sampling fingerprint network: %w", err)
 	}
-	// Transform into rich types
+
 	fp, err := transformFingerprint(sampleMap, hdrs, g.mockWebRTC, g.slim)
 	if err != nil {
 		return nil, err
 	}
-	
-	// Apply Camoufox constraints if enabled
+
 	if g.enableWhitelist || g.screenConstraints != nil || g.windowSize != nil || g.firefoxVersion != "" {
 		fp = g.applyCamoufoxConstraints(fp)
 	}
-	
+
 	return fp, nil
 }
 
-// applyCamoufoxConstraints applies all constraints from BROWSERFORGE_CONSTRAINTS.md
 func (g *Generator) applyCamoufoxConstraints(fp *Fingerprint) *Fingerprint {
-	// 1. Filter falsy values and clamp negative screen values to 0
+
 	filterFalsyValues(fp)
-	
-	// 2. Apply screen constraints to limit dimensions to real monitor bounds
+
 	if g.screenConstraints != nil {
 		applyScreenConstraints(&fp.Screen, g.screenConstraints)
 	}
-	
-	// 3. Apply window size overrides if specified
+
 	if g.windowSize != nil {
 		applyWindowSize(&fp.Screen, g.windowSize)
 	}
-	
-	// 4. Handle screen positioning for realistic window placement
+
 	handleScreenPositioning(&fp.Screen)
-	
-	// 5. Update Firefox version numbers in various fields
+
 	if g.browserOption == "firefox" && g.firefoxVersion != "" {
 		updateFirefoxVersion(fp, g.firefoxVersion)
 	} else if fp.Navigator.UserAgent != "" {
-		// Try to extract Firefox version from user agent
+
 		detectedVersion := extractFirefoxVersion(fp.Navigator.UserAgent)
 		if detectedVersion != "" {
 			updateFirefoxVersion(fp, detectedVersion)
 		}
 	}
-	
-	// 6. If whitelist is enabled, filter properties to only include those in the whitelist
+
 	if g.enableWhitelist {
 		fp = whitelistProperties(fp, DefaultWhitelist())
 	}
-	
+
 	return fp
 }
 
-// GenerateHeadersOnly creates only HTTP headers without the full fingerprint data,
-// applying any configured options.
 func (g *Generator) GenerateHeadersOnly() (map[string]string, error) {
-	// Apply seed
+
 	if g.seed != nil {
 		rand.Seed(*g.seed)
 	} else {
 		rand.Seed(time.Now().UnixNano())
 	}
-	// Prepare constraints
+
 	inputNet := make(map[string]string)
 	if g.browserOption != "" {
 		inputNet["*BROWSER"] = g.browserOption
@@ -178,55 +159,49 @@ func (g *Generator) GenerateHeadersOnly() (map[string]string, error) {
 	if g.customUserAgent != "" {
 		reqDeps["User-Agent"] = g.customUserAgent
 	}
-	
+
 	headers, err := g.headers.GenerateWithConstraints(inputNet, reqDeps)
 	if err != nil {
 		return nil, err
 	}
-	
-	// If whitelist enabled, filter headers
+
 	if g.enableWhitelist {
 		filteredHeaders := make(map[string]string)
 		whitelist := DefaultWhitelist()
-		
-		// Only keep headers in the whitelist
+
 		for _, allowed := range whitelist.Headers {
 			if value, exists := headers[allowed]; exists {
 				filteredHeaders[allowed] = value
 			}
 		}
-		
-		// Make sure User-Agent is always included
+
 		if _, exists := filteredHeaders["User-Agent"]; !exists {
 			if value, exists := headers["User-Agent"]; exists {
 				filteredHeaders["User-Agent"] = value
 			}
 		}
-		
+
 		return filteredHeaders, nil
 	}
-	
+
 	return headers, nil
 }
 
-// transformFingerprint maps the raw network sample and headers into the rich Fingerprint type.
 func transformFingerprint(
 	sample map[string]string,
 	headers map[string]string,
 	mockWebRTC bool,
 	slim bool,
 ) (*Fingerprint, error) {
-	// Create a new fingerprint object
+
 	fp := &Fingerprint{
 		Headers:    headers,
 		MockWebRTC: mockWebRTC,
 		Slim:       slim,
 	}
-	
-	// Initialize Canvas with empty struct
+
 	fp.Canvas = CanvasFingerprint{}
 
-	// Parse the screen data
 	if screenStr, ok := sample["screen"]; ok && screenStr != "" {
 		if len(screenStr) > len("*STRINGIFIED*") && screenStr[:len("*STRINGIFIED*")] == "*STRINGIFIED*" {
 			screenJSON := screenStr[len("*STRINGIFIED*"):]
@@ -234,45 +209,42 @@ func transformFingerprint(
 			if err := json.Unmarshal([]byte(screenJSON), &screenData); err != nil {
 				return nil, fmt.Errorf("failed to parse screen data: %w", err)
 			}
-			
-			// Map the screen data to the ScreenFingerprint struct
+
 			fp.Screen = ScreenFingerprint{
-				AvailHeight:     getIntOrDefault(screenData, "availHeight", 0),
-				AvailWidth:      getIntOrDefault(screenData, "availWidth", 0),
-				AvailTop:        getIntOrDefault(screenData, "availTop", 0),
-				AvailLeft:       getIntOrDefault(screenData, "availLeft", 0),
-				ColorDepth:      getIntOrDefault(screenData, "colorDepth", 0),
-				Height:          getIntOrDefault(screenData, "height", 0),
-				PixelDepth:      getIntOrDefault(screenData, "pixelDepth", 0),
-				Width:           getIntOrDefault(screenData, "width", 0),
+				AvailHeight:      getIntOrDefault(screenData, "availHeight", 0),
+				AvailWidth:       getIntOrDefault(screenData, "availWidth", 0),
+				AvailTop:         getIntOrDefault(screenData, "availTop", 0),
+				AvailLeft:        getIntOrDefault(screenData, "availLeft", 0),
+				ColorDepth:       getIntOrDefault(screenData, "colorDepth", 0),
+				Height:           getIntOrDefault(screenData, "height", 0),
+				PixelDepth:       getIntOrDefault(screenData, "pixelDepth", 0),
+				Width:            getIntOrDefault(screenData, "width", 0),
 				DevicePixelRatio: getFloatOrDefault(screenData, "devicePixelRatio", 0),
-				PageXOffset:     getIntOrDefault(screenData, "pageXOffset", 0),
-				PageYOffset:     getIntOrDefault(screenData, "pageYOffset", 0),
-				InnerHeight:     getIntOrDefault(screenData, "innerHeight", 0),
-				OuterHeight:     getIntOrDefault(screenData, "outerHeight", 0),
-				OuterWidth:      getIntOrDefault(screenData, "outerWidth", 0),
-				InnerWidth:      getIntOrDefault(screenData, "innerWidth", 0),
-				ScreenX:         getIntOrDefault(screenData, "screenX", 0),
-				ClientWidth:     getIntOrDefault(screenData, "clientWidth", 0),
-				ClientHeight:    getIntOrDefault(screenData, "clientHeight", 0),
-				HasHDR:          getBoolOrDefault(screenData, "hasHDR", false),
+				PageXOffset:      getIntOrDefault(screenData, "pageXOffset", 0),
+				PageYOffset:      getIntOrDefault(screenData, "pageYOffset", 0),
+				InnerHeight:      getIntOrDefault(screenData, "innerHeight", 0),
+				OuterHeight:      getIntOrDefault(screenData, "outerHeight", 0),
+				OuterWidth:       getIntOrDefault(screenData, "outerWidth", 0),
+				InnerWidth:       getIntOrDefault(screenData, "innerWidth", 0),
+				ScreenX:          getIntOrDefault(screenData, "screenX", 0),
+				ClientWidth:      getIntOrDefault(screenData, "clientWidth", 0),
+				ClientHeight:     getIntOrDefault(screenData, "clientHeight", 0),
+				HasHDR:           getBoolOrDefault(screenData, "hasHDR", false),
 			}
-			
-			// Extract window properties from screen data (similar to Python implementation)
+
 			fp.Window = WindowFingerprint{
-				InnerHeight:     getIntOrDefault(screenData, "innerHeight", 0),
-				OuterHeight:     getIntOrDefault(screenData, "outerHeight", 0),
-				OuterWidth:      getIntOrDefault(screenData, "outerWidth", 0),
-				InnerWidth:      getIntOrDefault(screenData, "innerWidth", 0),
-				ScreenX:         getIntOrDefault(screenData, "screenX", 0),
-				PageXOffset:     getIntOrDefault(screenData, "pageXOffset", 0),
-				PageYOffset:     getIntOrDefault(screenData, "pageYOffset", 0),
+				InnerHeight:      getIntOrDefault(screenData, "innerHeight", 0),
+				OuterHeight:      getIntOrDefault(screenData, "outerHeight", 0),
+				OuterWidth:       getIntOrDefault(screenData, "outerWidth", 0),
+				InnerWidth:       getIntOrDefault(screenData, "innerWidth", 0),
+				ScreenX:          getIntOrDefault(screenData, "screenX", 0),
+				PageXOffset:      getIntOrDefault(screenData, "pageXOffset", 0),
+				PageYOffset:      getIntOrDefault(screenData, "pageYOffset", 0),
 				DevicePixelRatio: getFloatOrDefault(screenData, "devicePixelRatio", 0),
 			}
 		}
 	}
 
-	// Parse Navigator data
 	userAgent := sample["userAgent"]
 	var userAgentData map[string]interface{}
 	if uadStr, ok := sample["userAgentData"]; ok && uadStr != "" && uadStr != "*MISSING_VALUE*" {
@@ -284,7 +256,6 @@ func transformFingerprint(
 		}
 	}
 
-	// Parse languages
 	var languages []string
 	if langStr, ok := sample["languages"]; ok && langStr != "" && langStr != "*MISSING_VALUE*" {
 		if len(langStr) > len("*STRINGIFIED*") && langStr[:len("*STRINGIFIED*")] == "*STRINGIFIED*" {
@@ -294,14 +265,12 @@ func transformFingerprint(
 			}
 		}
 	}
-	
-	// Set language from Accept-Language header if available
+
 	language := ""
 	if len(languages) > 0 {
 		language = languages[0]
 	}
-	
-	// Get or initialize extraProperties
+
 	var extraProperties map[string]interface{}
 	if epStr, ok := sample["extraProperties"]; ok && epStr != "" && epStr != "*MISSING_VALUE*" {
 		if len(epStr) > len("*STRINGIFIED*") && epStr[:len("*STRINGIFIED*")] == "*STRINGIFIED*" {
@@ -312,7 +281,6 @@ func transformFingerprint(
 		}
 	}
 
-	// Construct the NavigatorFingerprint
 	navigator := NavigatorFingerprint{
 		UserAgent:           userAgent,
 		UserAgentData:       userAgentData,
@@ -330,8 +298,7 @@ func transformFingerprint(
 		MaxTouchPoints:      getIntFromString(sample, "maxTouchPoints", 0),
 		ExtraProperties:     extraProperties,
 	}
-	
-	// Handle optional Navigator fields
+
 	if doNotTrack, ok := sample["doNotTrack"]; ok && doNotTrack != "*MISSING_VALUE*" {
 		navigator.DoNotTrack = &doNotTrack
 	}
@@ -355,15 +322,12 @@ func transformFingerprint(
 	}
 
 	fp.Navigator = navigator
-	
-	// Create Locale from Navigator language fields
+
 	fp.Locale = LocaleFingerprint{
 		Language:  navigator.Language,
 		Languages: navigator.Languages,
-		// Default timezone can be added here if needed
 	}
 
-	// Parse VideoCodecs
 	var videoCodecs map[string]string
 	if vcStr, ok := sample["videoCodecs"]; ok && vcStr != "" && vcStr != "*MISSING_VALUE*" {
 		if len(vcStr) > len("*STRINGIFIED*") && vcStr[:len("*STRINGIFIED*")] == "*STRINGIFIED*" {
@@ -375,7 +339,6 @@ func transformFingerprint(
 	}
 	fp.VideoCodecs = videoCodecs
 
-	// Parse AudioCodecs
 	var audioCodecs map[string]string
 	if acStr, ok := sample["audioCodecs"]; ok && acStr != "" && acStr != "*MISSING_VALUE*" {
 		if len(acStr) > len("*STRINGIFIED*") && acStr[:len("*STRINGIFIED*")] == "*STRINGIFIED*" {
@@ -386,14 +349,11 @@ func transformFingerprint(
 		}
 	}
 	fp.AudioCodecs = audioCodecs
-	
-	// Create AudioContext with default sample rate of 44100
-	// This is a standard sample rate used by most browsers
+
 	fp.AudioContext = AudioContextFingerprint{
 		SampleRate: 44100,
 	}
 
-	// Parse PluginsData
 	var pluginsData map[string]interface{}
 	if pdStr, ok := sample["pluginsData"]; ok && pdStr != "" && pdStr != "*MISSING_VALUE*" {
 		if len(pdStr) > len("*STRINGIFIED*") && pdStr[:len("*STRINGIFIED*")] == "*STRINGIFIED*" {
@@ -405,7 +365,6 @@ func transformFingerprint(
 	}
 	fp.PluginsData = pluginsData
 
-	// Parse Battery
 	var battery map[string]interface{}
 	if batteryStr, ok := sample["battery"]; ok && batteryStr != "" && batteryStr != "*MISSING_VALUE*" {
 		if len(batteryStr) > len("*STRINGIFIED*") && batteryStr[:len("*STRINGIFIED*")] == "*STRINGIFIED*" {
@@ -417,7 +376,6 @@ func transformFingerprint(
 		}
 	}
 
-	// Parse VideoCard
 	if videoCardStr, ok := sample["videoCard"]; ok && videoCardStr != "" && videoCardStr != "*MISSING_VALUE*" {
 		if len(videoCardStr) > len("*STRINGIFIED*") && videoCardStr[:len("*STRINGIFIED*")] == "*STRINGIFIED*" {
 			videoCardJSON := videoCardStr[len("*STRINGIFIED*"):]
@@ -425,13 +383,12 @@ func transformFingerprint(
 			if err := json.Unmarshal([]byte(videoCardJSON), &videoCardData); err != nil {
 				return nil, fmt.Errorf("failed to parse videoCard: %w", err)
 			}
-			
+
 			fp.VideoCard = &VideoCard{
 				Renderer: fmt.Sprintf("%v", videoCardData["renderer"]),
 				Vendor:   fmt.Sprintf("%v", videoCardData["vendor"]),
 			}
-			
-			// Also populate WebGL field with the same data
+
 			fp.WebGL = WebGLFingerprint{
 				Renderer: fmt.Sprintf("%v", videoCardData["renderer"]),
 				Vendor:   fmt.Sprintf("%v", videoCardData["vendor"]),
@@ -439,18 +396,17 @@ func transformFingerprint(
 		}
 	}
 
-	// Parse MultimediaDevices
 	var multimediaDevices []string
 	if mdStr, ok := sample["multimediaDevices"]; ok && mdStr != "" && mdStr != "*MISSING_VALUE*" {
 		if len(mdStr) > len("*STRINGIFIED*") && mdStr[:len("*STRINGIFIED*")] == "*STRINGIFIED*" {
 			mdJSON := mdStr[len("*STRINGIFIED*"):]
-			// First try to parse as string array
+
 			err := json.Unmarshal([]byte(mdJSON), &multimediaDevices)
 			if err != nil {
-				// If parsing as string array fails, try to parse as map/object and extract values
+
 				var mdMap map[string]interface{}
 				if err = json.Unmarshal([]byte(mdJSON), &mdMap); err == nil {
-					// Convert map to slice of strings
+
 					for _, v := range mdMap {
 						if strValue, ok := v.(string); ok {
 							multimediaDevices = append(multimediaDevices, strValue)
@@ -464,7 +420,6 @@ func transformFingerprint(
 	}
 	fp.MultimediaDevices = multimediaDevices
 
-	// Parse Fonts
 	var fonts []string
 	if fontsStr, ok := sample["fonts"]; ok && fontsStr != "" && fontsStr != "*MISSING_VALUE*" {
 		if len(fontsStr) > len("*STRINGIFIED*") && fontsStr[:len("*STRINGIFIED*")] == "*STRINGIFIED*" {
@@ -478,8 +433,6 @@ func transformFingerprint(
 
 	return fp, nil
 }
-
-// Helper functions for type conversion
 
 func getStringOrDefault(m map[string]string, key, defaultVal string) string {
 	if val, ok := m[key]; ok && val != "*MISSING_VALUE*" {

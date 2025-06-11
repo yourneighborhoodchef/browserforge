@@ -30,23 +30,19 @@ import (
 )
 
 func main() {
-    // Create a new fingerprint generator
     generator, err := fingerprint.New()
     if err != nil {
         log.Fatalf("Error creating generator: %v", err)
     }
     
-    // Generate a complete fingerprint
     fp, err := generator.Generate()
     if err != nil {
         log.Fatalf("Error generating fingerprint: %v", err)
     }
     
-    // Access fingerprint properties
     fmt.Println("User Agent:", fp.UserAgent)
     fmt.Println("OS/CPU:", fp.OSCpu)
     
-    // Access headers
     fmt.Println("Accept-Language header:", fp.Headers["Accept-Language"])
 }
 ```
@@ -66,7 +62,6 @@ fmt.Println("User-Agent:", headers["User-Agent"])
 ### Advanced Usage with Options
 
 ```go
-// Create a generator with options
 generator, err := fingerprint.NewWithOptions(
     fingerprint.WithBrowser("chrome"),
     fingerprint.WithOperatingSystem("windows"),
@@ -75,7 +70,6 @@ if err != nil {
     log.Fatalf("Error creating generator: %v", err)
 }
 
-// Generate a fingerprint with the specified options
 fp, err := generator.Generate()
 ```
 
@@ -84,13 +78,10 @@ fp, err := generator.Generate()
 BrowserForge also includes a command-line tool:
 
 ```bash
-# Generate and print HTTP headers as JSON
 browserforge headers
 
-# Generate and print a browser fingerprint without headers
 browserforge fingerprint
 
-# Generate and print a complete fingerprint with headers
 browserforge all
 ```
 
